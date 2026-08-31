@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 48" width="200" height="48">
+  <!-- warden wordmark (Signal): lowercase warden + a live status dot.
+       Text is set in the system UI sans; outline the text for a portable production asset. -->
+  <style>
+    .wm { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif; font-weight: 600; font-size: 34px; letter-spacing: -1.1px; fill: #0a0a0a; }
+    @media (prefers-color-scheme: dark) { .wm { fill: #f4f4f5; } }
+  </style>
+  <text class="wm" x="0" y="35">warden</text>
+  <circle cx="170" cy="31" r="4.6" fill="#2563eb"/>
+</svg>

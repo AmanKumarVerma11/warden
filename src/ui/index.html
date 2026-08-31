@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>warden</title>
+  <script>
+    // Set theme before paint to avoid a flash of the wrong theme.
+    (function () {
+      try {
+        var q = new URL(location.href).searchParams.get('theme');
+        var t = (q === 'dark' || q === 'light') ? q : localStorage.getItem('warden-theme');
+        if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+CiAgPCEtLSBXYXJkZW4gZmF2aWNvbiAoU2lnbmFsKS4gSW5rIGFkYXB0cyB0byB0aGUgYnJvd3NlciB0aGVtZTsgc2lnbmFsIGRvdCBzdGF5cyBibHVlLiAtLT4KICA8c3R5bGU+QG1lZGlhIChwcmVmZXJzLWNvbG9yLXNjaGVtZTpkYXJrKXsuaW5re3N0cm9rZTojZjRmNGY1fX08L3N0eWxlPgogIDxyZWN0IGNsYXNzPSJpbmsiIHg9IjMuNiIgeT0iMy42IiB3aWR0aD0iMTYuOCIgaGVpZ2h0PSIxNi44IiByeD0iNC42IiBmaWxsPSJub25lIiBzdHJva2U9IiMwYTBhMGEiIHN0cm9rZS13aWR0aD0iMS43Ii8+CiAgPGNpcmNsZSBjeD0iMTYuNCIgY3k9IjcuNiIgcj0iMi4xNSIgZmlsbD0iIzI1NjNlYiIvPgo8L3N2Zz4K" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<!--
+  DIRECTION CONTRACT (seed cdc49b5f · mode operate · brief-pinned, roll discarded)
+  THESIS: warden is a precise instrument you trust because it hides nothing and adds nothing.
+    Near-monochrome minimalism; it refuses the colored-tile admin panel, gradients, glows, candy cards.
+  OWN-WORLD: True-neutral black and white in a dark and a light theme. Hairline rules, no card fills,
+    generous air. System sans for UI, tabular mono for every number and path. Four signal colors
+    (red, amber, blue, green) only as small status dots, never as fills.
+  STORY: Open it and read your machine's agent footprint in calm black and white; color pulls the eye
+    only to what actually needs attention.
+  FIRST VIEWPORT: Quiet wordmark and slim sidebar; a spacious ledger band of key figures in large
+    tabular mono split by hairlines; below, the attention list as typographic rows where only a small
+    dot carries color.
+  FORM: Editorial-minimal dashboard, the category canon executed at full craft. Bar: Linear / Vercel / Things.
+  FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+-->
+  <div class="app">
+    <aside class="sidebar">
+      <div class="wordmark" aria-label="warden">
+        <span class="wordmark-name">warden</span>
+        <span class="wordmark-dot" aria-hidden="true"></span>
+      </div>
+      <nav id="nav" class="nav" aria-label="Sections"></nav>
+      <div class="sidebar-foot">
+        <span class="statuspill" id="ro-pill"><span class="s-dot ok"></span>Read-only</span>
+        <span class="statuspill"><span class="s-dot ok"></span>Local</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-title">
+          <h1 id="view-title">Overview</h1>
+          <p id="view-sub" class="view-sub"></p>
+        </div>
+        <div class="topbar-actions">
+          <span id="scanned-at" class="scanned-at"></span>
+          <button id="controls-toggle" class="btn" type="button" title="Turn write controls on or off"></button>
+          <button id="theme-toggle" class="icon-btn" type="button" aria-label="Toggle color theme" title="Toggle theme"></button>
+          <button id="rescan" class="btn" type="button">Rescan</button>
+        </div>
+      </header>
+      <section id="view" class="view" aria-live="polite"></section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

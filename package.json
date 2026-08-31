@@ -1,0 +1,35 @@
+{
+  "name": "warden",
+  "version": "0.1.0",
+  "description": "Local, read-only visibility into everything Claude Code stores on your machine — config, MCP connections, rules, hooks, skills, memory, and session data. Nothing leaves your device.",
+  "type": "module",
+  "bin": {
+    "warden": "bin/warden.js"
+  },
+  "scripts": {
+    "start": "node bin/warden.js",
+    "scan": "node -e \"import('./src/scanner/index.js').then(m=>m.fullScan()).then(d=>console.log(JSON.stringify(d.summary,null,2)))\"",
+    "build:site": "node scripts/build-site.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "ai-agent",
+    "agent-governance",
+    "observability",
+    "security",
+    "mcp",
+    "privacy"
+  ],
+  "license": "MIT"
+}
