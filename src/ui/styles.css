@@ -122,6 +122,9 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.02em; }
 }
 .nav-item .nav-count { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--fg-4); font-variant-numeric: tabular-nums; }
 .nav-item .nav-count.alarm { color: var(--red); }
+.nav-ext { text-decoration: none; }
+.nav-ext .ext-arrow { margin-left: auto; width: 13px; height: 13px; opacity: 0.5; flex: none; }
+.nav-ext:hover .ext-arrow { opacity: 0.9; }
 .sidebar-foot { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px 10px 2px; margin-top: 12px; border-top: 1px solid var(--line); }
 .statuspill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--fg-3); }
 
