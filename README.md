@@ -89,7 +89,7 @@ A read-only scanner (`src/scanner/`) reads the known Claude Code locations, clas
 warden ships as a visibility tool. The direction is a control and governance layer for AI agents.
 
 - **Phase 1, Visibility (this release).** See everything, safely, read-only.
-- **Phase 2, Control (in progress).** Opt-in, reversible writes. Shipped: forget and restore memory notes; archive, restore, and reclaim session-transcript disk space. Next: edit rules and permissions, toggle connections, switch and edit personas.
+- **Phase 2, Control (in progress).** Opt-in, reversible writes. Shipped: forget and restore memory notes; archive, restore, and reclaim session-transcript disk space; edit permission rules and disable hooks. Next: toggle connections, edit CLAUDE.md rules, switch and edit personas.
 - **Phase 3, Governance.** A tamper-evident activity log, guardrails as policy, secret and PII scanning at scale, cost visibility, and persona sync across a team.
 - **Phase 4, Cross-agent.** One control plane for every local AI agent, not just Claude Code.
 

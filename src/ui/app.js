@@ -124,12 +124,25 @@ function viewCapabilities(d) {
 
 function viewRules(d) {
   const st = d.settings, perm = st.permissions;
-  const chips = (arr) => (arr && arr.length ? `<div class="chips">${arr.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '<span class="muted">none</span>');
+  const canWrite = controlsOn();
+  const permChip = (list, x) => canWrite
+    ? `<span class="chip removable">${esc(x)}<button class="chip-x" data-plist="${list}" data-prule="${esc(x)}" title="Remove ${esc(x)}" aria-label="Remove ${esc(x)}">&times;</button></span>`
+    : `<span class="chip">${esc(x)}</span>`;
+  const chips = (list, arr) => (arr && arr.length ? `<div class="chips">${arr.map((x) => permChip(list, x)).join('')}</div>` : '<span class="muted">none</span>');
+  const addForm = canWrite ? `<div class="perm-add">
+      <select class="perm-add-list" aria-label="Permission list"><option value="deny">Deny</option><option value="ask">Ask</option><option value="allow">Allow</option></select>
+      <input class="perm-add-input" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. Bash(rm:*)" />
+      <button class="btn perm-add-btn" type="button" data-perm-add>Add rule</button>
+    </div>` : '';
   const hooks = st.hooks.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Event</th><th>Matcher</th><th>Command</th></tr></thead><tbody>
-        ${st.hooks.map((h) => `<tr><td>${esc(h.event)}</td><td class="mono">${esc(h.matcher)}</td><td class="mono">${esc(h.command)}</td></tr>`).join('')}
+    ? `<div class="table-wrap"><table><thead><tr><th>Event</th><th>Matcher</th><th>Command</th>${canWrite ? '<th></th>' : ''}</tr></thead><tbody>
+        ${st.hooks.map((h) => `<tr><td>${esc(h.event)}</td><td class="mono">${esc(h.matcher)}</td><td class="mono">${esc(h.command)}</td>${canWrite ? `<td class="col-act"><button class="linkbtn danger" data-hscope="${esc(h.scope)}" data-hevent="${esc(h.event)}" data-hmatcher="${esc(h.matcher)}" data-hcommand="${esc(h.command)}">Disable</button></td>` : ''}</tr>`).join('')}
       </tbody></table></div>`
     : '<p class="muted">No hooks configured. Nothing runs shell commands automatically.</p>';
+  const trash = canWrite && state.trash ? state.trash.filter((t) => t.kind === 'permission' || t.kind === 'hook') : [];
+  const trashBlock = trash.length ? `
+    <div class="section-label">warden trash <span class="hint">reversible edits &middot; restore to undo</span></div>
+    <div class="panel">${trash.map((t) => `<div class="note-item"><div class="note-head"><span class="note-name">${esc(t.label)}</span><button class="linkbtn" data-restore="${esc(t.id)}" style="margin-left:auto">${t.kind === 'hook' ? 'Re-enable' : 'Undo'}</button></div></div>`).join('')}</div>` : '';
   const projRows = st.projectPermissions.map((p) => `
     <tr><td class="path">${esc(p.path)}</td>
       <td>${p.trusted ? '<span class="tag ok">trusted</span>' : '<span class="tag">untrusted</span>'}</td>
@@ -137,6 +150,7 @@ function viewRules(d) {
       <td>${p.enabledMcpJson.length ? esc(p.enabledMcpJson.join(', ')) : '<span class="faint">·</span>'}</td></tr>`).join('');
 
   return `
+    ${canWrite ? '<p class="intro">Controls are on. Remove risky allow rules, add denies, or disable a hook. Every change backs up your settings file first and is fully reversible from the trash below.</p>' : ''}
     <div class="panel"><div class="panel-title">Global rules (CLAUDE.md)</div>
       <div class="panel-sub">${st.globalClaudeMd ? fmtBytes(st.globalClaudeMdBytes) + ' · injected into every session' : 'Not present.'}</div>
       ${st.globalClaudeMd ? `<div class="md scroll-box">${mdToHtml(st.globalClaudeMd)}</div>` : ''}
@@ -145,10 +159,11 @@ function viewRules(d) {
       <div class="panel"><div class="panel-title">Permissions</div>
         <div class="panel-sub">Default mode: ${esc(perm.defaultMode || 'unset')}</div>
         <div class="dl">
-          <div class="dl-row"><span class="dt">Allow</span><span class="dd">${chips(perm.allow)}</span></div>
-          <div class="dl-row"><span class="dt">Ask</span><span class="dd">${chips(perm.ask)}</span></div>
-          <div class="dl-row"><span class="dt">Deny</span><span class="dd">${chips(perm.deny)}</span></div>
+          <div class="dl-row"><span class="dt">Allow</span><span class="dd">${chips('allow', perm.allow)}</span></div>
+          <div class="dl-row"><span class="dt">Ask</span><span class="dd">${chips('ask', perm.ask)}</span></div>
+          <div class="dl-row"><span class="dt">Deny</span><span class="dd">${chips('deny', perm.deny)}</span></div>
         </div>
+        ${addForm}
       </div>
       <div class="panel"><div class="panel-title">Managed policy</div>
         <div class="panel-sub">Control that lives outside your own settings.</div>
@@ -161,6 +176,7 @@ function viewRules(d) {
     </div>
     <div class="panel"><div class="panel-title">Hooks</div>
       <div class="panel-sub">Shell commands the agent runs automatically around its actions.</div>${hooks}</div>
+    ${trashBlock}
     <div class="section-label">Per-project trust & permissions</div>
     ${st.projectPermissions.length ? `<div class="table-wrap"><table>
       <thead><tr><th>Project</th><th>Trust</th><th>Allowed tools</th><th>Enabled project MCPs</th></tr></thead>
@@ -184,7 +200,7 @@ function viewSkills(d) {
 
 function viewMemory(d) {
   const m = d.memory;
-  const canWrite = controlsOn() && !d.demo;
+  const canWrite = controlsOn();
   const trash = canWrite && state.trash ? state.trash.filter((t) => t.kind === 'memory') : [];
   if (!m.byProject.length && !trash.length) return '<div class="allclear">No memory notes found.</div>';
   const blocks = m.byProject.map((p) => `
@@ -229,7 +245,7 @@ function viewPersonas(d) {
 
 function viewActivity(d) {
   const p = d.projects;
-  const canWrite = controlsOn() && !d.demo;
+  const canWrite = controlsOn();
   const trash = canWrite && state.trash ? state.trash : [];
   const staged = trash.reduce((s, t) => s + (t.bytes || 0), 0);
   const rows = p.items.map((it) => {
@@ -321,25 +337,58 @@ function toggleTheme() {
 }
 
 // ---------- controls (Phase 2: opt-in, reversible writes) ----------
+function isDemo() { return !!(state.data && state.data.demo); }
 function controlsOn() {
   try {
-    if (new URL(location.href).searchParams.get('controls') === '1') return true;
-    return localStorage.getItem('warden-controls') === '1';
+    const q = new URL(location.href).searchParams.get('controls');
+    if (q === '1') return true;
+    if (q === '0') return false;
+    const ls = localStorage.getItem('warden-controls');
+    if (ls === '1') return true;
+    if (ls === '0') return false;
+    return isDemo();   // default: on in the demo (to show the control layer), off on a real machine
   } catch (e) { return false; }
 }
 function paintControls() {
   const on = controlsOn();
-  const demo = !!(state.data && state.data.demo);
+  const demo = isDemo();
   const btn = document.getElementById('controls-toggle');
-  if (btn) { btn.textContent = on ? 'Controls: on' : 'Controls: off'; btn.style.display = demo ? 'none' : ''; }
+  if (btn) { btn.textContent = on ? 'Controls: on' : 'Controls: off'; btn.style.display = ''; }
   const pill = document.getElementById('ro-pill');
-  if (pill) pill.innerHTML = `<span class="s-dot ${on && !demo ? 'medium' : 'ok'}"></span>${on && !demo ? 'Controls on' : 'Read-only'}`;
+  if (pill) {
+    const label = !on ? 'Read-only' : (demo ? 'Preview controls' : 'Controls on');
+    pill.innerHTML = `<span class="s-dot ${on ? 'medium' : 'ok'}"></span>${label}`;
+  }
 }
 function toggleControls() {
   try { localStorage.setItem('warden-controls', controlsOn() ? '0' : '1'); } catch (e) {}
   paintControls(); render();
 }
+// In the demo, controls are shown but write nothing: each action explains what warden would do.
+let toastTimer = null;
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3600);
+}
+function previewMsg(action, a) {
+  a = a || {};
+  switch (action) {
+    case 'forgetMemory': return 'Warden would move this note to a local trash you can restore. Nothing is written in the demo.';
+    case 'archiveTranscripts': return 'Warden would archive this project’s transcripts to a restorable trash. Nothing is written in the demo.';
+    case 'editPermission': return `Warden would ${a.op === 'remove' ? 'remove' : 'add'} the ${a.list} rule, backing up settings.json first. Nothing is written in the demo.`;
+    case 'disableHook': return 'Warden would disable this hook so it stops running, reversibly. Nothing is written in the demo.';
+    case 'restore': return 'Warden would restore this item from the trash. Nothing is written in the demo.';
+    case 'purgeItem': return 'Warden would permanently delete this archived item. Nothing is written in the demo.';
+    case 'emptyTrash': return 'Warden would permanently empty the trash and free the space. Nothing is written in the demo.';
+    default: return 'On your own machine this edits your real config. Nothing is written in the demo.';
+  }
+}
 async function doAction(action, args, confirmMsg) {
+  if (isDemo()) { toast(previewMsg(action, args)); return; }
   if (confirmMsg && !window.confirm(confirmMsg)) return;
   try {
     const res = await fetch('/api/action', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, ...args }) });
@@ -423,9 +472,15 @@ document.addEventListener('click', (e) => {
   const archive = e.target.closest('[data-archive]');
   if (archive) { const slug = archive.dataset.archive; const name = archive.dataset.name || 'this project'; return doAction('archiveTranscripts', { slug }, `Archive all transcripts for "${name}"? They move to warden trash and can be restored. Nothing is deleted.`); }
   const purge = e.target.closest('[data-purge]');
-  if (purge) { const t = window.prompt('Permanently delete this archived item and free its space? This cannot be undone.\n\nType PURGE to confirm:'); if (t === 'PURGE') return doAction('purgeItem', { id: purge.dataset.purge, confirm: 'PURGE' }); return; }
+  if (purge) { if (isDemo()) return toast(previewMsg('purgeItem')); const t = window.prompt('Permanently delete this archived item and free its space? This cannot be undone.\n\nType PURGE to confirm:'); if (t === 'PURGE') return doAction('purgeItem', { id: purge.dataset.purge, confirm: 'PURGE' }); return; }
   const empty = e.target.closest('[data-empty-trash]');
-  if (empty) { const t = window.prompt('This permanently deletes everything in warden trash and frees the space. This cannot be undone.\n\nType EMPTY to confirm:'); if (t === 'EMPTY') return doAction('emptyTrash', { confirm: 'EMPTY' }); return; }
+  if (empty) { if (isDemo()) return toast(previewMsg('emptyTrash')); const t = window.prompt('This permanently deletes everything in warden trash and frees the space. This cannot be undone.\n\nType EMPTY to confirm:'); if (t === 'EMPTY') return doAction('emptyTrash', { confirm: 'EMPTY' }); return; }
+  const permRm = e.target.closest('[data-plist]');
+  if (permRm) { const list = permRm.dataset.plist, rule = permRm.dataset.prule; return doAction('editPermission', { list, rule, op: 'remove' }, `Remove ${list} rule "${rule}"? You can undo it from the trash.`); }
+  const permAdd = e.target.closest('[data-perm-add]');
+  if (permAdd) { const box = permAdd.closest('.perm-add'); const list = box.querySelector('.perm-add-list').value; const rule = box.querySelector('.perm-add-input').value.trim(); if (!rule) return; return doAction('editPermission', { list, rule, op: 'add' }); }
+  const hookDis = e.target.closest('[data-hcommand]');
+  if (hookDis) { const h = hookDis.dataset; return doAction('disableHook', { scope: h.hscope, event: h.hevent, matcher: h.hmatcher, command: h.hcommand }, 'Disable this hook so it no longer runs automatically? You can re-enable it from the trash.'); }
 });
 document.getElementById('rescan').addEventListener('click', scan);
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);

@@ -15,7 +15,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { CLAUDE_DIR, readJson, exists, statSafe, listDir, decodeProjectSlug } from './util.js';
+import { CLAUDE_DIR, readJson, readText, exists, statSafe, listDir, decodeProjectSlug } from './util.js';
 
 const TRASH = path.join(CLAUDE_DIR, '.warden-trash');
 const MANIFEST = path.join(TRASH, 'manifest.json');
@@ -111,6 +111,26 @@ export async function restore({ id } = {}) {
       if (exists(from)) await fs.rename(from, path.join(it.originalDir, name));
     }
     await fs.rmdir(it.trashedDir).catch(() => {});
+  } else if (it.kind === 'permission' || it.kind === 'hook') {
+    if (!insideClaude(it.file)) return { ok: false, error: 'Path escaped its safe root.' };
+    const { obj } = await loadSettings(it.file);
+    if (obj === null) return { ok: false, error: 'Settings file is not valid JSON; not touching it.' };
+    if (it.kind === 'permission') {
+      if (!obj.permissions || typeof obj.permissions !== 'object') obj.permissions = {};
+      const arr = Array.isArray(obj.permissions[it.list]) ? obj.permissions[it.list] : [];
+      obj.permissions[it.list] = it.op === 'remove'
+        ? (arr.includes(it.rule) ? arr : [...arr, it.rule])   // undo a removal: re-add
+        : arr.filter((x) => x !== it.rule);                   // undo an addition: remove
+    } else {
+      if (!obj.hooks || typeof obj.hooks !== 'object') obj.hooks = {};
+      if (!Array.isArray(obj.hooks[it.event])) obj.hooks[it.event] = [];
+      let g = obj.hooks[it.event].find((x) => (x?.matcher ?? '*') === it.matcher);
+      if (!g) { g = { matcher: it.matcher, hooks: [] }; obj.hooks[it.event].push(g); }
+      if (!Array.isArray(g.hooks)) g.hooks = [];
+      g.hooks.push(it.hookDef);
+    }
+    await writeSettings(it.file, obj);
+    await fs.rm(path.join(TRASH, it.id), { recursive: true, force: true }).catch(() => {});
   } else {
     if (!insideClaude(it.original) || !insideTrash(it.trashed)) return { ok: false, error: 'Path escaped its safe root.' };
     if (!exists(it.trashed)) return { ok: false, error: 'Trashed file is missing.' };
@@ -129,7 +149,7 @@ export async function purgeItem({ id, confirm } = {}) {
   const idx = m.items.findIndex((x) => x.id === id);
   if (idx < 0) return { ok: false, error: 'Not in trash.' };
   const it = m.items[idx];
-  const target = it.kind === 'transcript' ? it.trashedDir : it.trashed;
+  const target = it.trashedDir || it.trashed || path.join(TRASH, it.id);
   if (!insideTrash(target)) return { ok: false, error: 'Refusing to delete outside the trash.' };
   const freed = it.bytes || 0;
   await fs.rm(target, { recursive: true, force: true });
@@ -145,7 +165,7 @@ export async function emptyTrash({ confirm } = {}) {
   const m = await readManifest();
   let freed = 0, removed = 0;
   for (const it of m.items) {
-    const target = it.kind === 'transcript' ? it.trashedDir : it.trashed;
+    const target = it.trashedDir || it.trashed || path.join(TRASH, it.id);
     if (!target || !insideTrash(target)) continue;   // never delete outside the trash
     if (exists(target)) {
       freed += it.bytes || (it.kind === 'transcript' ? await dirSize(target) : await sizeOf(target));
@@ -164,7 +184,88 @@ export async function listTrash() {
   return { items, staged };
 }
 
-const ACTIONS = { forgetMemory, archiveTranscripts, restore, purgeItem, emptyTrash };
+// ---- Settings editing: permissions & hooks, reversible via granular restore ----
+// Each edit backs up the raw settings file into the trash, then applies a single
+// structured change. Restore reverses exactly that change on the current file, so
+// per-change undo survives other edits; the raw backup is the fallback of record.
+
+function settingsFileFor(scope) {
+  return path.join(CLAUDE_DIR, scope === 'local' ? 'settings.local.json' : 'settings.json');
+}
+function validRule(r) { return typeof r === 'string' && r.length >= 1 && r.length <= 500 && !/[\n\r]/.test(r); }
+async function loadSettings(file) {
+  const raw = await readText(file);
+  if (raw == null) return { raw: null, obj: {} };
+  try { return { raw, obj: JSON.parse(raw) }; }
+  catch { return { raw, obj: null }; }   // obj === null signals invalid JSON
+}
+async function writeSettings(file, obj) { await fs.writeFile(file, JSON.stringify(obj, null, 2) + '\n'); }
+async function backupSettings(id, file, raw) {
+  const dir = path.join(TRASH, id);
+  await fs.mkdir(dir, { recursive: true });
+  const backup = path.join(dir, path.basename(file));
+  if (raw != null) await fs.writeFile(backup, raw);
+  return backup;
+}
+
+// Add or remove a single permission rule in ~/.claude/settings.json. Reversible.
+export async function editPermission({ list, rule, op } = {}) {
+  if (!['allow', 'deny', 'ask'].includes(list)) return { ok: false, error: 'Invalid permission list.' };
+  if (!['add', 'remove'].includes(op)) return { ok: false, error: 'Invalid operation.' };
+  if (!validRule(rule)) return { ok: false, error: 'Invalid rule.' };
+  const file = settingsFileFor('user');
+  if (!insideClaude(file)) return { ok: false, error: 'Path is outside ~/.claude.' };
+  const { raw, obj } = await loadSettings(file);
+  if (obj === null) return { ok: false, error: 'settings.json is not valid JSON; refusing to edit it.' };
+  if (!obj.permissions || typeof obj.permissions !== 'object') obj.permissions = {};
+  const arr = Array.isArray(obj.permissions[list]) ? obj.permissions[list] : [];
+  if (op === 'remove') {
+    if (!arr.includes(rule)) return { ok: false, error: `Rule not found in ${list}.` };
+    obj.permissions[list] = arr.filter((x) => x !== rule);
+  } else {
+    if (arr.includes(rule)) return { ok: false, error: `Rule already in ${list}.` };
+    obj.permissions[list] = [...arr, rule];
+  }
+  const id = `${stamp()}__perm`;
+  const backup = await backupSettings(id, file, raw);
+  await writeSettings(file, obj);
+  const m = await readManifest();
+  m.items.unshift({ id, kind: 'permission', label: `${op === 'remove' ? 'removed' : 'added'} ${list}: ${rule}`, file, list, rule, op, backup, bytes: 0, at: new Date().toISOString() });
+  await writeManifest(m);
+  return { ok: true, id };
+}
+
+// Disable one hook (remove it from its settings file). Reversible via restore = re-enable.
+export async function disableHook({ scope, event, matcher, command } = {}) {
+  if (!event || !command || typeof command !== 'string') return { ok: false, error: 'Invalid hook reference.' };
+  const file = settingsFileFor(scope === 'local' ? 'local' : 'user');
+  if (!insideClaude(file)) return { ok: false, error: 'Path is outside ~/.claude.' };
+  const { raw, obj } = await loadSettings(file);
+  if (obj === null) return { ok: false, error: 'Settings file is not valid JSON; refusing to edit it.' };
+  const groups = obj?.hooks?.[event];
+  if (!Array.isArray(groups)) return { ok: false, error: 'Hook not found.' };
+  const wantMatcher = matcher == null ? '*' : matcher;
+  let removed = null, gi = -1, hi = -1;
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    if ((g?.matcher ?? '*') !== wantMatcher || !Array.isArray(g.hooks)) continue;
+    const j = g.hooks.findIndex((h) => (h?.command || '') === command);
+    if (j >= 0) { removed = g.hooks[j]; gi = i; hi = j; break; }
+  }
+  if (!removed) return { ok: false, error: 'Hook not found.' };
+  groups[gi].hooks.splice(hi, 1);
+  if (groups[gi].hooks.length === 0) groups.splice(gi, 1);
+  if (groups.length === 0) delete obj.hooks[event];
+  const id = `${stamp()}__hook`;
+  const backup = await backupSettings(id, file, raw);
+  await writeSettings(file, obj);
+  const m = await readManifest();
+  m.items.unshift({ id, kind: 'hook', label: `hook disabled: ${command.slice(0, 60)}`, file, event, matcher: wantMatcher, hookDef: removed, backup, bytes: 0, at: new Date().toISOString() });
+  await writeManifest(m);
+  return { ok: true, id };
+}
+
+const ACTIONS = { forgetMemory, archiveTranscripts, editPermission, disableHook, restore, purgeItem, emptyTrash };
 
 export async function runAction(name, args) {
   const fn = ACTIONS[name];

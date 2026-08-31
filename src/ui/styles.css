@@ -157,6 +157,18 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.02em; }
 .trash-foot { display: flex; align-items: center; gap: 14px; margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
 .trash-foot .hint { font-size: 12px; color: var(--fg-4); }
 .col-act { text-align: right; white-space: nowrap; }
+.chip.removable { display: inline-flex; align-items: center; gap: 4px; padding-right: 6px; }
+.chip-x { background: none; border: 0; padding: 0 1px; margin: 0; color: var(--fg-4); cursor: pointer; font-size: 14px; line-height: 1; border-radius: var(--radius-sm); }
+.chip-x:hover { color: var(--red); }
+.perm-add { display: flex; gap: 8px; margin-top: 16px; }
+.perm-add > * { min-width: 0; }
+.perm-add-list, .perm-add-input { font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid var(--line-2); border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); }
+.perm-add-input { flex: 1; font-family: var(--mono); }
+.perm-add-input::placeholder { color: var(--fg-4); }
+.perm-add-input:focus, .perm-add-list:focus { outline: none; border-color: var(--fg-4); }
+.perm-add-btn { flex: none; }
+#toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(12px); width: max-content; max-width: min(460px, calc(100vw - 32px)); padding: 12px 16px; background: var(--fg); color: var(--bg); border-radius: var(--radius); font-size: 13px; line-height: 1.45; text-align: center; opacity: 0; pointer-events: none; z-index: 100; transition: opacity .25s, transform .25s cubic-bezier(0.16, 1, 0.3, 1); }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .icon-btn {
   display: inline-grid; place-items: center; width: 32px; height: 32px;
   background: none; border: 1px solid transparent; border-radius: var(--radius);
