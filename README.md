@@ -48,6 +48,7 @@ Secret and PII patterns found in local files and recent transcripts (always mask
 - **Memory** — everything the agent has written down about you, across projects.
 - **Personas** — save your current rules and permissions as a persona and switch between them per client or context.
 - **Activity & Data** — session history and its footprint on disk, so you can see it and, with Controls on, reclaim it.
+- **Audit log** — a tamper-evident, hash-chained record of every change warden makes, with an integrity check.
 - **All Locations** — a plain-English map of every place Claude Code stores something.
 
 ## Quickstart
@@ -90,7 +91,7 @@ warden ships as a visibility tool. The direction is a control and governance lay
 
 - **Phase 1, Visibility (this release).** See everything, safely, read-only.
 - **Phase 2, Control (in progress).** Opt-in, reversible writes. Shipped: forget and restore memory notes; archive, restore, and reclaim session-transcript disk space; edit permission rules, disable hooks, edit the global CLAUDE.md, and **save and switch personas** (rules + permissions). Next: switch connections (MCPs) per persona.
-- **Phase 3, Governance.** A tamper-evident activity log, guardrails as policy, secret and PII scanning at scale, cost visibility, and persona sync across a team.
+- **Phase 3, Governance (started).** Shipped: a tamper-evident audit log of every change warden makes, hash-chained so any edit or deletion is detectable. Next: guardrails as policy, secret and PII scanning at scale, cost visibility, and persona sync across a team.
 - **Phase 4, Cross-agent.** One control plane for every local AI agent, not just Claude Code.
 
 ## Status

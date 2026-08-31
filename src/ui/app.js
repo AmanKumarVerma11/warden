@@ -11,6 +11,7 @@ const VIEWS = [
   { id: 'memory', label: 'Memory', ic: 'memory', sub: 'What the agent remembers about you.' },
   { id: 'personas', label: 'Personas', ic: 'personas', sub: 'Swappable bundles of rules, connections and permissions.' },
   { id: 'activity', label: 'Activity & Data', ic: 'activity', sub: 'Session history and its footprint on disk.' },
+  { id: 'audit', label: 'Audit log', ic: 'audit', sub: 'A tamper-evident record of every change warden made.' },
   { id: 'privacy', label: 'Privacy & Egress', ic: 'privacy', sub: 'Secrets on disk and data leaving the device.' },
   { id: 'locations', label: 'All Locations', ic: 'locations', sub: 'Every place Claude Code stores things, in plain English.' },
 ];
@@ -24,6 +25,7 @@ const ICONS = {
   memory: '<ellipse cx="12" cy="6.2" rx="6.3" ry="2.5"/><path d="M5.7 6.2v11.6c0 1.35 2.82 2.5 6.3 2.5s6.3-1.15 6.3-2.5V6.2"/><path d="M5.7 12c0 1.35 2.82 2.5 6.3 2.5s6.3-1.15 6.3-2.5"/>',
   personas: '<rect x="4.5" y="4.5" width="10.5" height="10.5" rx="2"/><path d="M9 19.5h8.5a2 2 0 0 0 2-2V9"/>',
   activity: '<path d="M4 6.6A1.6 1.6 0 0 1 5.6 5h3.7l2 2.2h7.1A1.6 1.6 0 0 1 21 8.8v8.6A1.6 1.6 0 0 1 19.4 19H5.6A1.6 1.6 0 0 1 4 17.4V6.6Z"/>',
+  audit: '<rect x="5" y="5" width="14" height="15.5" rx="2"/><rect x="9" y="3.2" width="6" height="3.4" rx="1.1"/><path d="m8.8 13 2.2 2.2 4.2-4.4"/>',
   privacy: '<path d="M12 3 5.2 5.5v5.4c0 4.05 2.75 7.6 6.8 9.3 4.05-1.7 6.8-5.25 6.8-9.3V5.5L12 3Z"/>',
   locations: '<path d="M12 20.5c4.3-4 6.2-7.05 6.2-10A6.2 6.2 0 0 0 5.8 10.5c0 2.95 1.9 6 6.2 10Z"/><circle cx="12" cy="10.4" r="2.2"/>',
   sun: '<circle cx="12" cy="12" r="3.8"/><path d="M12 2.6v2.4M12 19v2.4M4.3 4.3 6 6M18 18l1.7 1.7M2.6 12H5M19 12h2.4M4.3 19.7 6 18M18 6l1.7-1.7"/>',
@@ -306,6 +308,28 @@ function viewActivity(d) {
     ${trashBlock}`;
 }
 
+function viewAudit(d) {
+  const a = d.activity || { entries: [], count: 0, integrity: 'empty', brokenAt: null };
+  const integ = a.integrity === 'verified'
+    ? '<span class="statuspill"><span class="s-dot ok"></span>Integrity verified</span>'
+    : a.integrity === 'broken'
+      ? `<span class="statuspill"><span class="s-dot high"></span>Chain broken${a.brokenAt ? ' at #' + a.brokenAt : ''}</span>`
+      : '<span class="statuspill"><span class="s-dot"></span>No entries yet</span>';
+  const rows = a.entries.map((e) => `
+    <tr>
+      <td class="mono">${e.seq}</td>
+      <td class="mono">${esc(new Date(e.at).toLocaleString())}</td>
+      <td>${esc(e.summary)}</td>
+      <td>${e.reversible ? '<span class="tag">reversible</span>' : '<span class="flag"><span class="m-dot"></span>permanent</span>'}</td>
+    </tr>`).join('');
+  return `
+    <p class="intro">Every change warden makes is recorded here, each entry cryptographically chained to the one before it. Alter or remove any entry and the chain breaks, so the record is tamper-evident. It is local, append-only, and never leaves your machine.</p>
+    <div class="chips" style="gap:16px;margin-bottom:22px">${integ}<span class="statuspill"><span class="s-dot"></span>${a.count} change${a.count === 1 ? '' : 's'} logged</span></div>
+    ${a.entries.length
+      ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>When</th><th>Change</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : '<div class="allclear">No changes recorded yet. When you use a control (with Controls on), it appears here.</div>'}`;
+}
+
 function viewPrivacy(d) {
   const f = d.secretFindings;
   const secretCard = f.length
@@ -343,7 +367,7 @@ function viewLocations(d) {
 
 const RENDERERS = {
   overview: viewOverview, capabilities: viewCapabilities, rules: viewRules, skills: viewSkills,
-  memory: viewMemory, personas: viewPersonas, activity: viewActivity, privacy: viewPrivacy, locations: viewLocations,
+  memory: viewMemory, personas: viewPersonas, activity: viewActivity, audit: viewAudit, privacy: viewPrivacy, locations: viewLocations,
 };
 
 // ---------- theme ----------

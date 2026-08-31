@@ -2,7 +2,8 @@
 // The `attention` feed turns raw findings into "so what" — it is the product's hook.
 
 import path from 'node:path';
-import { CLAUDE_DIR, HOME, exists, statSafe, dirStats, fmtBytes, readJson } from './util.js';
+import { createHash } from 'node:crypto';
+import { CLAUDE_DIR, HOME, exists, statSafe, dirStats, fmtBytes, readJson, readText } from './util.js';
 import { knownLocations } from './paths.js';
 import { scanSettings } from './settings.js';
 import { scanMcp } from './mcp.js';
@@ -35,6 +36,7 @@ export async function fullScan() {
   const attention = buildAttention({ settings, mcp, secretFindings, projects, telemetry });
   const personasPreview = buildPersonas(settings, mcp);
   const personas = await readSavedPersonas();
+  const activity = await readActivity();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -65,6 +67,7 @@ export async function fullScan() {
     telemetry,
     personasPreview,
     personas,
+    activity,
     secretFindings,
     coverage: { transcriptBytesScanned: projects.scannedBytes },
   };
@@ -116,6 +119,26 @@ function buildAttention({ settings, mcp, secretFindings, projects, telemetry }) 
 
 // Read-only preview: shows how today's scattered config maps onto the "persona"
 // concept — a switchable bundle of rules + connections + permissions per context.
+// The audit log: warden's append-only record of every change it made, with each entry
+// hash-chained to the previous. Recompute the chain to detect any tampering.
+async function readActivity() {
+  const raw = await readText(path.join(CLAUDE_DIR, '.warden', 'activity.jsonl'));
+  if (!raw) return { entries: [], count: 0, integrity: 'empty', brokenAt: null };
+  const lines = raw.split('\n').filter(Boolean);
+  const entries = [];
+  let prevHash = '0'.repeat(64), integrity = 'verified', brokenAt = null;
+  for (let i = 0; i < lines.length; i++) {
+    let e;
+    try { e = JSON.parse(lines[i]); } catch { integrity = 'broken'; if (brokenAt == null) brokenAt = i + 1; continue; }
+    const expect = createHash('sha256').update(`${prevHash}|${e.seq}|${e.at}|${e.action}|${e.summary}|${e.reversible}`).digest('hex');
+    if (e.prevHash !== prevHash || e.hash !== expect) { integrity = 'broken'; if (brokenAt == null) brokenAt = e.seq ?? (i + 1); }
+    entries.push({ seq: e.seq, at: e.at, action: e.action, summary: e.summary, reversible: !!e.reversible });
+    prevHash = e.hash || prevHash;
+  }
+  entries.reverse();   // newest first
+  return { entries, count: entries.length, integrity, brokenAt };
+}
+
 // Saved personas (warden's own concept), read from ~/.claude/.warden/personas.json.
 // Summaries only; the full rules content stays on disk and is applied by switchPersona.
 async function readSavedPersonas() {

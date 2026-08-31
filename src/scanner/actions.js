@@ -15,6 +15,7 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { CLAUDE_DIR, readJson, readText, exists, statSafe, listDir, decodeProjectSlug } from './util.js';
 
 const TRASH = path.join(CLAUDE_DIR, '.warden-trash');
@@ -300,6 +301,39 @@ export async function editRules({ content } = {}) {
 // is deferred to a later version. Definitions live in warden's own ~/.claude/.warden/.
 const WARDEN_DIR = path.join(CLAUDE_DIR, '.warden');
 const PERSONAS = path.join(WARDEN_DIR, 'personas.json');
+
+// ---- Audit log: a tamper-evident, append-only record of every change warden makes ----
+const ACTIVITY = path.join(WARDEN_DIR, 'activity.jsonl');
+const IRREVERSIBLE = new Set(['purgeItem', 'emptyTrash']);
+function activitySummary(name, args, result) {
+  switch (name) {
+    case 'forgetMemory': return `Forgot memory note "${args.file}"`;
+    case 'archiveTranscripts': return `Archived transcripts for ${decodeProjectSlug(args.slug || '').split('/').filter(Boolean).pop() || args.slug}`;
+    case 'editPermission': return `${args.op === 'remove' ? 'Removed' : 'Added'} ${args.list} rule: ${args.rule}`;
+    case 'disableHook': return `Disabled hook: ${String(args.command || '').slice(0, 60)}`;
+    case 'editRules': return 'Edited the global CLAUDE.md';
+    case 'savePersona': return `Saved persona "${args.name}"`;
+    case 'switchPersona': return result.summary || 'Switched persona';
+    case 'deletePersona': return result.summary || 'Deleted a persona';
+    case 'restore': return 'Restored an item from the trash';
+    case 'purgeItem': return 'Permanently deleted a trashed item';
+    case 'emptyTrash': return `Emptied the trash (${result.removed || 0} item${result.removed === 1 ? '' : 's'})`;
+    default: return name;
+  }
+}
+function activityHash(prevHash, e) {
+  return createHash('sha256').update(`${prevHash}|${e.seq}|${e.at}|${e.action}|${e.summary}|${e.reversible}`).digest('hex');
+}
+async function appendActivity(name, args, result) {
+  const raw = await readText(ACTIVITY);
+  const lines = raw ? raw.split('\n').filter(Boolean) : [];
+  let prevHash = '0'.repeat(64), seq = 1;
+  if (lines.length) { try { const last = JSON.parse(lines[lines.length - 1]); prevHash = last.hash; seq = (last.seq || 0) + 1; } catch {} }
+  const e = { seq, at: new Date().toISOString(), action: name, summary: activitySummary(name, args || {}, result || {}), reversible: !IRREVERSIBLE.has(name), prevHash };
+  e.hash = activityHash(prevHash, e);
+  await fs.mkdir(WARDEN_DIR, { recursive: true });
+  await fs.appendFile(ACTIVITY, JSON.stringify(e) + '\n');
+}
 async function readPersonas() { return (await readJson(PERSONAS)) || { personas: [], activeId: null }; }
 async function writePersonas(p) { await fs.mkdir(WARDEN_DIR, { recursive: true }); await fs.writeFile(PERSONAS, JSON.stringify(p, null, 2)); }
 async function backupFiles(id, specs) {
@@ -354,7 +388,7 @@ export async function switchPersona({ id } = {}) {
   const m = await readManifest();
   m.items.unshift({ id: bid, kind: 'persona-switch', label: `switched to ${persona.name}`, files, prevActiveId, bytes: 0, at: new Date().toISOString() });
   await writeManifest(m);
-  return { ok: true };
+  return { ok: true, summary: `Switched to persona "${persona.name}"` };
 }
 
 // Remove a saved persona definition (reversible: the definitions file is backed up).
@@ -371,7 +405,7 @@ export async function deletePersona({ id } = {}) {
   const m = await readManifest();
   m.items.unshift({ id: bid, kind: 'persona-def', label: `deleted persona: ${removed.name}`, files, bytes: 0, at: new Date().toISOString() });
   await writeManifest(m);
-  return { ok: true };
+  return { ok: true, summary: `Deleted persona "${removed.name}"` };
 }
 
 const ACTIONS = { forgetMemory, archiveTranscripts, editPermission, disableHook, editRules, savePersona, switchPersona, deletePersona, restore, purgeItem, emptyTrash };
@@ -379,6 +413,9 @@ const ACTIONS = { forgetMemory, archiveTranscripts, editPermission, disableHook,
 export async function runAction(name, args) {
   const fn = ACTIONS[name];
   if (!fn) return { ok: false, error: 'Unknown action.' };
-  try { return await fn(args || {}); }
-  catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  try {
+    const result = await fn(args || {});
+    if (result && result.ok) { try { await appendActivity(name, args, result); } catch {} }   // audit log; never fail the action
+    return result;
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 }

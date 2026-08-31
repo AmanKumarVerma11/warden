@@ -169,6 +169,19 @@ export function demoModel() {
       ],
       activeId: 'demo-personal',
     },
+    activity: {
+      integrity: 'verified',
+      count: 6,
+      brokenAt: null,
+      entries: [
+        { seq: 6, at: '2026-08-30T18:42:11.000Z', action: 'switchPersona', summary: 'Switched to persona "Personal projects"', reversible: true },
+        { seq: 5, at: '2026-08-30T18:41:02.000Z', action: 'editPermission', summary: 'Added deny rule: Bash(rm:*)', reversible: true },
+        { seq: 4, at: '2026-08-29T22:10:45.000Z', action: 'disableHook', summary: 'Disabled hook: ~/.claude/hooks/guard.sh', reversible: true },
+        { seq: 3, at: '2026-08-29T21:55:30.000Z', action: 'forgetMemory', summary: 'Forgot memory note "old-client-notes.md"', reversible: true },
+        { seq: 2, at: '2026-08-28T16:20:09.000Z', action: 'emptyTrash', summary: 'Emptied the trash (3 items)', reversible: false },
+        { seq: 1, at: '2026-08-28T16:19:00.000Z', action: 'archiveTranscripts', summary: 'Archived transcripts for legacy-api', reversible: true },
+      ],
+    },
     secretFindings: SECRETS,
     coverage: { transcriptBytesScanned: 8 * MB },
   };
