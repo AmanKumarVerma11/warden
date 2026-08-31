@@ -131,6 +131,20 @@ export async function restore({ id } = {}) {
     }
     await writeSettings(it.file, obj);
     await fs.rm(path.join(TRASH, it.id), { recursive: true, force: true }).catch(() => {});
+  } else if (it.kind === 'rules') {
+    if (!insideClaude(it.file)) return { ok: false, error: 'Path escaped its safe root.' };
+    if (it.hadFile && it.backup && exists(it.backup)) await fs.copyFile(it.backup, it.file);
+    else await fs.rm(it.file, { force: true }).catch(() => {});   // there was no file before; undo removes it
+    await fs.rm(path.join(TRASH, it.id), { recursive: true, force: true }).catch(() => {});
+  } else if (it.kind === 'persona-switch' || it.kind === 'persona-def') {
+    for (const f of it.files || []) {
+      if (!insideClaude(f.path)) return { ok: false, error: 'Path escaped its safe root.' };
+      const bak = path.join(TRASH, it.id, f.name);
+      if (f.existed && exists(bak)) await fs.copyFile(bak, f.path);
+      else if (!f.existed) await fs.rm(f.path, { force: true }).catch(() => {});
+    }
+    if (it.kind === 'persona-switch') { const pp = await readPersonas(); pp.activeId = it.prevActiveId || null; await writePersonas(pp); }
+    await fs.rm(path.join(TRASH, it.id), { recursive: true, force: true }).catch(() => {});
   } else {
     if (!insideClaude(it.original) || !insideTrash(it.trashed)) return { ok: false, error: 'Path escaped its safe root.' };
     if (!exists(it.trashed)) return { ok: false, error: 'Trashed file is missing.' };
@@ -265,7 +279,102 @@ export async function disableHook({ scope, event, matcher, command } = {}) {
   return { ok: true, id };
 }
 
-const ACTIONS = { forgetMemory, archiveTranscripts, editPermission, disableHook, restore, purgeItem, emptyTrash };
+// Replace the global CLAUDE.md with new content, backing up the current file first.
+export async function editRules({ content } = {}) {
+  if (typeof content !== 'string' || content.length > 1_000_000) return { ok: false, error: 'Invalid content.' };
+  const file = path.join(CLAUDE_DIR, 'CLAUDE.md');
+  if (!insideClaude(file)) return { ok: false, error: 'Path is outside ~/.claude.' };
+  const raw = await readText(file);   // null if there is no global CLAUDE.md yet
+  const id = `${stamp()}__rules`;
+  const backup = await backupSettings(id, file, raw);
+  await fs.writeFile(file, content);
+  const m = await readManifest();
+  m.items.unshift({ id, kind: 'rules', label: 'edited global CLAUDE.md', file, hadFile: raw != null, backup, bytes: 0, at: new Date().toISOString() });
+  await writeManifest(m);
+  return { ok: true, id };
+}
+
+// ---- Personas: save the current setup as a named bundle, and switch between them ----
+// A persona bundles permission rules + the global CLAUDE.md. Switching applies both to
+// the live config, backing up the current files first so it is reversible. MCP switching
+// is deferred to a later version. Definitions live in warden's own ~/.claude/.warden/.
+const WARDEN_DIR = path.join(CLAUDE_DIR, '.warden');
+const PERSONAS = path.join(WARDEN_DIR, 'personas.json');
+async function readPersonas() { return (await readJson(PERSONAS)) || { personas: [], activeId: null }; }
+async function writePersonas(p) { await fs.mkdir(WARDEN_DIR, { recursive: true }); await fs.writeFile(PERSONAS, JSON.stringify(p, null, 2)); }
+async function backupFiles(id, specs) {
+  const dir = path.join(TRASH, id);
+  await fs.mkdir(dir, { recursive: true });
+  const out = [];
+  for (const s of specs) {
+    const raw = await readText(s.path);
+    const existed = raw != null;
+    if (existed) await fs.writeFile(path.join(dir, s.name), raw);
+    out.push({ path: s.path, name: s.name, existed });
+  }
+  return out;
+}
+
+// Snapshot the current permissions + global CLAUDE.md as a named persona.
+export async function savePersona({ name } = {}) {
+  if (!name || typeof name !== 'string' || !name.trim() || name.length > 80) return { ok: false, error: 'Invalid persona name.' };
+  const { obj } = await loadSettings(settingsFileFor('user'));
+  if (obj === null) return { ok: false, error: 'settings.json is not valid JSON.' };
+  const perms = obj.permissions || {};
+  const rules = (await readText(path.join(CLAUDE_DIR, 'CLAUDE.md'))) || '';
+  const p = await readPersonas();
+  const persona = {
+    id: `p_${stamp()}`, name: name.trim(),
+    permissions: { allow: perms.allow || [], ask: perms.ask || [], deny: perms.deny || [] },
+    rules, createdAt: new Date().toISOString(),
+  };
+  p.personas.unshift(persona);
+  await writePersonas(p);
+  return { ok: true, id: persona.id };
+}
+
+// Apply a persona: write its permissions + rules to the live config, reversibly.
+export async function switchPersona({ id } = {}) {
+  const p = await readPersonas();
+  const persona = p.personas.find((x) => x.id === id);
+  if (!persona) return { ok: false, error: 'Persona not found.' };
+  const settingsFile = settingsFileFor('user');
+  const claudeMd = path.join(CLAUDE_DIR, 'CLAUDE.md');
+  if (!insideClaude(settingsFile) || !insideClaude(claudeMd)) return { ok: false, error: 'Path is outside ~/.claude.' };
+  const { obj } = await loadSettings(settingsFile);
+  if (obj === null) return { ok: false, error: 'settings.json is not valid JSON.' };
+  const bid = `${stamp()}__persona-switch`;
+  const files = await backupFiles(bid, [{ path: settingsFile, name: 'settings.json' }, { path: claudeMd, name: 'CLAUDE.md' }]);
+  obj.permissions = { ...(obj.permissions || {}), allow: persona.permissions.allow, ask: persona.permissions.ask, deny: persona.permissions.deny };
+  await writeSettings(settingsFile, obj);
+  await fs.writeFile(claudeMd, persona.rules || '');
+  const prevActiveId = p.activeId;
+  p.activeId = persona.id;
+  await writePersonas(p);
+  const m = await readManifest();
+  m.items.unshift({ id: bid, kind: 'persona-switch', label: `switched to ${persona.name}`, files, prevActiveId, bytes: 0, at: new Date().toISOString() });
+  await writeManifest(m);
+  return { ok: true };
+}
+
+// Remove a saved persona definition (reversible: the definitions file is backed up).
+export async function deletePersona({ id } = {}) {
+  const p = await readPersonas();
+  const idx = p.personas.findIndex((x) => x.id === id);
+  if (idx < 0) return { ok: false, error: 'Persona not found.' };
+  const bid = `${stamp()}__persona-def`;
+  const files = await backupFiles(bid, [{ path: PERSONAS, name: 'personas.json' }]);
+  const removed = p.personas[idx];
+  p.personas.splice(idx, 1);
+  if (p.activeId === id) p.activeId = null;
+  await writePersonas(p);
+  const m = await readManifest();
+  m.items.unshift({ id: bid, kind: 'persona-def', label: `deleted persona: ${removed.name}`, files, bytes: 0, at: new Date().toISOString() });
+  await writeManifest(m);
+  return { ok: true };
+}
+
+const ACTIONS = { forgetMemory, archiveTranscripts, editPermission, disableHook, editRules, savePersona, switchPersona, deletePersona, restore, purgeItem, emptyTrash };
 
 export async function runAction(name, args) {
   const fn = ACTIONS[name];

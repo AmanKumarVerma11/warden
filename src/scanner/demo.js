@@ -161,6 +161,14 @@ export function demoModel() {
     projects: { items: PROJECTS.slice().sort((a, b) => b.bytes - a.bytes), totalBytes: projectsBytes, totalSessions, transcriptSecretFindings: [SECRETS[0], SECRETS[2]], scannedBytes: 8 * MB },
     telemetry: { present: true, bytes: 6.2 * MB, files: 40, failedEvents: 14, samples: ['1p_failed_events.a1c9…json', '1p_failed_events.7f20…json', 'metrics.session.json', 'events.buffer.jsonl'] },
     personasPreview,
+    personas: {
+      saved: [
+        { id: 'demo-client-acme', name: 'Acme (client, locked down)', allow: 3, ask: 4, deny: 6, rulesBytes: 2100, createdAt: '2026-08-18T10:00:00.000Z' },
+        { id: 'demo-personal', name: 'Personal projects', allow: 9, ask: 1, deny: 1, rulesBytes: 540, createdAt: '2026-08-09T14:30:00.000Z' },
+        { id: 'demo-review', name: 'Read-only review', allow: 4, ask: 0, deny: 8, rulesBytes: 1280, createdAt: '2026-08-22T09:15:00.000Z' },
+      ],
+      activeId: 'demo-personal',
+    },
     secretFindings: SECRETS,
     coverage: { transcriptBytesScanned: 8 * MB },
   };

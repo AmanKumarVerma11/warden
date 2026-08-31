@@ -1,7 +1,8 @@
 // Orchestrates the full read-only scan and assembles a single model for the UI.
 // The `attention` feed turns raw findings into "so what" — it is the product's hook.
 
-import { CLAUDE_DIR, HOME, exists, statSafe, dirStats, fmtBytes } from './util.js';
+import path from 'node:path';
+import { CLAUDE_DIR, HOME, exists, statSafe, dirStats, fmtBytes, readJson } from './util.js';
 import { knownLocations } from './paths.js';
 import { scanSettings } from './settings.js';
 import { scanMcp } from './mcp.js';
@@ -33,6 +34,7 @@ export async function fullScan() {
   const secretFindings = [...memory.secretFindings, ...projects.transcriptSecretFindings];
   const attention = buildAttention({ settings, mcp, secretFindings, projects, telemetry });
   const personasPreview = buildPersonas(settings, mcp);
+  const personas = await readSavedPersonas();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -62,6 +64,7 @@ export async function fullScan() {
     projects,
     telemetry,
     personasPreview,
+    personas,
     secretFindings,
     coverage: { transcriptBytesScanned: projects.scannedBytes },
   };
@@ -113,6 +116,22 @@ function buildAttention({ settings, mcp, secretFindings, projects, telemetry }) 
 
 // Read-only preview: shows how today's scattered config maps onto the "persona"
 // concept — a switchable bundle of rules + connections + permissions per context.
+// Saved personas (warden's own concept), read from ~/.claude/.warden/personas.json.
+// Summaries only; the full rules content stays on disk and is applied by switchPersona.
+async function readSavedPersonas() {
+  const data = (await readJson(path.join(CLAUDE_DIR, '.warden', 'personas.json'))) || { personas: [], activeId: null };
+  const saved = (data.personas || []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    allow: (p.permissions?.allow || []).length,
+    ask: (p.permissions?.ask || []).length,
+    deny: (p.permissions?.deny || []).length,
+    rulesBytes: p.rules ? Buffer.byteLength(p.rules) : 0,
+    createdAt: p.createdAt || null,
+  }));
+  return { saved, activeId: data.activeId || null };
+}
+
 function buildPersonas(settings, mcp) {
   const personas = [{
     id: 'default',

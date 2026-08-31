@@ -1,7 +1,7 @@
 // warden dashboard · fetches the local scan and renders read-only views.
 // Minimal monochrome system; all file-derived strings are escaped before insertion.
 
-const state = { data: null, view: 'overview', trash: [] };
+const state = { data: null, view: 'overview', trash: [], editingRules: false };
 
 const VIEWS = [
   { id: 'overview', label: 'Overview', ic: 'overview', sub: 'What Claude Code has on this machine.' },
@@ -139,7 +139,7 @@ function viewRules(d) {
         ${st.hooks.map((h) => `<tr><td>${esc(h.event)}</td><td class="mono">${esc(h.matcher)}</td><td class="mono">${esc(h.command)}</td>${canWrite ? `<td class="col-act"><button class="linkbtn danger" data-hscope="${esc(h.scope)}" data-hevent="${esc(h.event)}" data-hmatcher="${esc(h.matcher)}" data-hcommand="${esc(h.command)}">Disable</button></td>` : ''}</tr>`).join('')}
       </tbody></table></div>`
     : '<p class="muted">No hooks configured. Nothing runs shell commands automatically.</p>';
-  const trash = canWrite && state.trash ? state.trash.filter((t) => t.kind === 'permission' || t.kind === 'hook') : [];
+  const trash = canWrite && state.trash ? state.trash.filter((t) => t.kind === 'permission' || t.kind === 'hook' || t.kind === 'rules') : [];
   const trashBlock = trash.length ? `
     <div class="section-label">warden trash <span class="hint">reversible edits &middot; restore to undo</span></div>
     <div class="panel">${trash.map((t) => `<div class="note-item"><div class="note-head"><span class="note-name">${esc(t.label)}</span><button class="linkbtn" data-restore="${esc(t.id)}" style="margin-left:auto">${t.kind === 'hook' ? 'Re-enable' : 'Undo'}</button></div></div>`).join('')}</div>` : '';
@@ -151,9 +151,12 @@ function viewRules(d) {
 
   return `
     ${canWrite ? '<p class="intro">Controls are on. Remove risky allow rules, add denies, or disable a hook. Every change backs up your settings file first and is fully reversible from the trash below.</p>' : ''}
-    <div class="panel"><div class="panel-title">Global rules (CLAUDE.md)</div>
+    <div class="panel"><div class="panel-title">Global rules (CLAUDE.md)${canWrite && !state.editingRules ? '<button class="linkbtn" type="button" data-edit-rules style="margin-left:14px">Edit</button>' : ''}</div>
       <div class="panel-sub">${st.globalClaudeMd ? fmtBytes(st.globalClaudeMdBytes) + ' · injected into every session' : 'Not present.'}</div>
-      ${st.globalClaudeMd ? `<div class="md scroll-box">${mdToHtml(st.globalClaudeMd)}</div>` : ''}
+      ${canWrite && state.editingRules
+        ? `<textarea class="rules-edit" id="rules-textarea" spellcheck="false" aria-label="Global CLAUDE.md">${esc(st.globalClaudeMd || '')}</textarea>
+           <div class="edit-actions"><button class="btn" type="button" data-save-rules>Save</button><button class="linkbtn" type="button" data-cancel-rules>Cancel</button><span class="ehint">Backs up the current file first. Undo from the trash.</span></div>`
+        : (st.globalClaudeMd ? `<div class="md scroll-box">${mdToHtml(st.globalClaudeMd)}</div>` : (canWrite ? '<p class="muted">No global CLAUDE.md yet. Click Edit to create one.</p>' : ''))}
     </div>
     <div class="grid-2">
       <div class="panel"><div class="panel-title">Permissions</div>
@@ -226,21 +229,45 @@ function viewMemory(d) {
 }
 
 function viewPersonas(d) {
-  const cards = d.personasPreview.map((p) => `
+  const canWrite = controlsOn();
+  const pers = d.personas || { saved: [], activeId: null };
+  const activeId = pers.activeId;
+  const savedCards = (pers.saved || []).map((p) => `
+    <div class="panel">
+      <div class="panel-title">${esc(p.name)}${p.id === activeId ? ' <span class="tag ok">active</span>' : ''}</div>
+      <div class="dl" style="margin-top:12px">
+        <div class="dl-row"><span class="dt">Permissions</span><span class="dd mono">${p.allow} allow · ${p.ask} ask · ${p.deny} deny</span></div>
+        <div class="dl-row"><span class="dt">Rules</span><span class="dd mono">${p.rulesBytes ? fmtBytes(p.rulesBytes) + ' CLAUDE.md' : 'none'}</span></div>
+      </div>
+      ${canWrite ? `<div class="edit-actions">${p.id === activeId ? '<span class="faint">current setup</span>' : `<button class="btn" type="button" data-persona-switch="${esc(p.id)}">Switch to this</button>`}<button class="linkbtn danger" data-persona-delete="${esc(p.id)}">Delete</button></div>` : ''}
+    </div>`).join('');
+  const saveForm = canWrite ? `<div class="persona-save">
+      <input class="perm-add-input" id="persona-name" type="text" maxlength="80" spellcheck="false" autocomplete="off" placeholder="Name your current setup, e.g. Client A" />
+      <button class="btn" type="button" data-persona-save>Save current setup</button>
+    </div>` : '';
+  const trash = canWrite && state.trash ? state.trash.filter((t) => t.kind === 'persona-switch' || t.kind === 'persona-def') : [];
+  const trashBlock = trash.length ? `
+    <div class="section-label">warden trash <span class="hint">restore to undo a switch or bring back a deleted persona</span></div>
+    <div class="panel">${trash.map((t) => `<div class="note-item"><div class="note-head"><span class="note-name">${esc(t.label)}</span><button class="linkbtn" data-restore="${esc(t.id)}" style="margin-left:auto">Undo</button></div></div>`).join('')}</div>` : '';
+  const previewCards = d.personasPreview.map((p) => `
     <div class="panel">
       <div class="panel-title">${esc(p.name)} ${p.kind === 'active' ? '<span class="tag ok">active</span>' : '<span class="tag">suggested</span>'}</div>
       <div class="dl" style="margin-top:12px">
         <div class="dl-row"><span class="dt">Rules</span><span class="dd">${/[\\/]/.test(p.rules) ? `<span class="path">${esc(p.rules)}</span>` : `<span class="chip">${esc(p.rules)}</span>`}</span></div>
         <div class="dl-row"><span class="dt">Connections</span><span class="dd">${p.mcps.length ? `<div class="chips">${p.mcps.map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>` : '<span class="faint">inherits global</span>'}</span></div>
         ${p.hooks != null ? `<div class="dl-row"><span class="dt">Hooks</span><span class="dd mono">${p.hooks}</span></div>` : ''}
-        ${p.allowedTools != null ? `<div class="dl-row"><span class="dt">Allowed</span><span class="dd mono">${p.allowedTools} tools</span></div>` : ''}
       </div>
       <div class="preview-note">${esc(p.note)}</div>
     </div>`).join('');
   return `
-    <p class="intro">A <strong>persona</strong> is a switchable bundle of rules, connections, memory and permissions for one context: a client, a project, a mode of work. Today that config is scattered and global. Below is how your current setup maps onto personas.</p>
-    <div class="section-label">Preview <span class="hint">read-only · Phase 2 makes these switchable and syncable across a team</span></div>
-    <div class="grid-2" style="margin-top:14px">${cards}</div>`;
+    <p class="intro">A <strong>persona</strong> is a switchable bundle of rules and permissions for one context: a client, a project, a mode of work. ${canWrite ? 'Save your current setup as a persona, then switch between them. Switching rewrites your permissions and CLAUDE.md, backing up the current ones first, so it is fully reversible.' : 'Turn on Controls to save your setup as a persona and switch between them.'}</p>
+    <div class="section-label">Your personas</div>
+    ${savedCards ? `<div class="grid-2" style="margin-top:14px">${savedCards}</div>` : `<p class="muted">No personas saved yet.${canWrite ? ' Save your current setup below to create one.' : ''}</p>`}
+    ${saveForm}
+    ${trashBlock}
+    <div class="preview-note" style="margin:22px 0 0">Switching applies a persona's rules and permissions today. Connections (MCPs) are shown below but not switched yet; that is the next step.</div>
+    <div class="section-label">How your current config maps <span class="hint">read-only</span></div>
+    <div class="grid-2" style="margin-top:14px">${previewCards}</div>`;
 }
 
 function viewActivity(d) {
@@ -381,6 +408,10 @@ function previewMsg(action, a) {
     case 'archiveTranscripts': return 'Warden would archive this project’s transcripts to a restorable trash. Nothing is written in the demo.';
     case 'editPermission': return `Warden would ${a.op === 'remove' ? 'remove' : 'add'} the ${a.list} rule, backing up settings.json first. Nothing is written in the demo.`;
     case 'disableHook': return 'Warden would disable this hook so it stops running, reversibly. Nothing is written in the demo.';
+    case 'editRules': return 'Warden would save your CLAUDE.md, backing up the current file first. Nothing is written in the demo.';
+    case 'savePersona': return 'Warden would save your current permissions and rules as a persona. Nothing is written in the demo.';
+    case 'switchPersona': return 'Warden would apply this persona’s rules and permissions, backing up your current ones first. Nothing is written in the demo.';
+    case 'deletePersona': return 'Warden would delete this saved persona, reversibly. Nothing is written in the demo.';
     case 'restore': return 'Warden would restore this item from the trash. Nothing is written in the demo.';
     case 'purgeItem': return 'Warden would permanently delete this archived item. Nothing is written in the demo.';
     case 'emptyTrash': return 'Warden would permanently empty the trash and free the space. Nothing is written in the demo.';
@@ -433,6 +464,7 @@ function render() {
 function setView(id) {
   if (!RENDERERS[id]) return;
   state.view = id;
+  state.editingRules = false;
   try { if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id); } catch (e) {}
   render();
   window.scrollTo(0, 0);
@@ -481,6 +513,18 @@ document.addEventListener('click', (e) => {
   if (permAdd) { const box = permAdd.closest('.perm-add'); const list = box.querySelector('.perm-add-list').value; const rule = box.querySelector('.perm-add-input').value.trim(); if (!rule) return; return doAction('editPermission', { list, rule, op: 'add' }); }
   const hookDis = e.target.closest('[data-hcommand]');
   if (hookDis) { const h = hookDis.dataset; return doAction('disableHook', { scope: h.hscope, event: h.hevent, matcher: h.hmatcher, command: h.hcommand }, 'Disable this hook so it no longer runs automatically? You can re-enable it from the trash.'); }
+  const editRulesBtn = e.target.closest('[data-edit-rules]');
+  if (editRulesBtn) { state.editingRules = true; return render(); }
+  const cancelRules = e.target.closest('[data-cancel-rules]');
+  if (cancelRules) { state.editingRules = false; return render(); }
+  const saveRules = e.target.closest('[data-save-rules]');
+  if (saveRules) { const ta = document.getElementById('rules-textarea'); if (!ta) return; const content = ta.value; state.editingRules = false; render(); return doAction('editRules', { content }); }
+  const pSwitch = e.target.closest('[data-persona-switch]');
+  if (pSwitch) return doAction('switchPersona', { id: pSwitch.dataset.personaSwitch }, 'Switch to this persona? It rewrites your permissions and CLAUDE.md, backing up the current ones first. Reversible from the trash.');
+  const pDelete = e.target.closest('[data-persona-delete]');
+  if (pDelete) return doAction('deletePersona', { id: pDelete.dataset.personaDelete }, 'Delete this saved persona? You can undo it from the trash.');
+  const pSave = e.target.closest('[data-persona-save]');
+  if (pSave) { const inp = document.getElementById('persona-name'); const name = inp ? inp.value.trim() : ''; if (!name) { if (inp) inp.focus(); return; } return doAction('savePersona', { name }); }
 });
 document.getElementById('rescan').addEventListener('click', scan);
 document.getElementById('theme-toggle').addEventListener('click', toggleTheme);

@@ -227,7 +227,7 @@
             <div class="row"><div class="name">Rules &amp; Hooks</div><div class="desc">Your global <code>CLAUDE.md</code>, your permission rules (allow, ask, deny), the hooks that auto-run shell commands, and per-project trust. The instructions and automation that shape every session.</div></div>
             <div class="row"><div class="name">Skills &amp; Plugins</div><div class="desc">The installed abilities the agent can invoke. Each one can change its behavior for a whole class of task.</div></div>
             <div class="row"><div class="name">Memory</div><div class="desc">Everything the agent has written down about you, across projects. Bad or stale notes quietly degrade its answers, and some may hold personal data.</div></div>
-            <div class="row"><div class="name">Personas</div><div class="desc">How your scattered config maps onto switchable per-context bundles (rules, connections, memory, permissions). A preview today of where warden is heading.</div></div>
+            <div class="row"><div class="name">Personas</div><div class="desc">Save your current rules and permissions as a named persona, then switch between them per client or context. Switching is reversible; connection (MCP) switching is coming.</div></div>
             <div class="row"><div class="name">Activity &amp; Data</div><div class="desc">Session history and its footprint on disk. It is the largest and most sensitive store on your machine, and it is never cleaned up on its own.</div></div>
             <div class="row"><div class="name">Privacy &amp; Egress</div><div class="desc">Secret and PII patterns found in your files and recent transcripts, always masked, plus the telemetry sitting on disk, including events that tried to leave and are still here.</div></div>
             <div class="row"><div class="name">All Locations</div><div class="desc">A plain-English map of every place Claude Code stores something, so nothing is a mystery folder.</div></div>
@@ -257,6 +257,7 @@
             <div class="row"><div class="name">Remove a permission</div><div class="desc">In <strong>Rules &amp; Hooks</strong>, click the <strong>&times;</strong> on any allow, ask, or deny rule to remove it. Your <code>settings.json</code> is backed up first; undo it from the trash below.</div></div>
             <div class="row"><div class="name">Add a permission</div><div class="desc">Use the add form under Permissions: pick a list (deny is the default), type a rule like <code>Bash(rm:*)</code>, and click <strong>Add rule</strong>.</div></div>
             <div class="row"><div class="name">Disable a hook</div><div class="desc">In <strong>Rules &amp; Hooks</strong>, click <strong>Disable</strong> on any hook to stop it running automatically. <strong>Re-enable</strong> it from the trash whenever you want it back.</div></div>
+            <div class="row"><div class="name">Save &amp; switch personas</div><div class="desc">In <strong>Personas</strong>, name your current setup and click <strong>Save current setup</strong>. Later, <strong>Switch to</strong> any saved persona to apply its rules and permissions; your current ones are backed up first, so it undoes from the trash.</div></div>
             <div class="row"><div class="name">Restore or empty</div><div class="desc">Each view's trash section lets you <strong>Restore</strong> (undo) an item, or <strong>Empty</strong> the trash to permanently free the space. Emptying is the one irreversible step, and it always asks first.</div></div>
           </div>
         </section>
@@ -279,7 +280,7 @@
           <h3>Cleaning stale or wrong memories</h3>
           <p>The agent's notes about you shape its answers. When one is outdated or simply wrong, forget it from the Memory view so it stops steering the model.</p>
           <h3>Separating work by client or context</h3>
-          <p>If you use one machine across clients, your rules, connections, and memory blur together. The Personas view shows how your setup maps onto per-context bundles today, and it is the direction warden is building toward: switch your whole agent context with one action.</p>
+          <p>If you use one machine across clients, your rules and permissions blur together. Save each setup as a persona, then switch your rules and permissions in one action when you change context, reversibly. Connection switching is the next step. This is warden's headline: one agent, cleanly separated contexts.</p>
         </section>
 
         <section id="faq">
@@ -293,7 +294,7 @@
             <details><summary>Is the hosted demo showing my real data?</summary><div class="ans"><p>No. The hosted demo runs on synthetic data for a fictional machine, entirely in your browser. warden only ever reads your real machine when you run it locally, and even then only to display it to you.</p></div></details>
             <details><summary>Which versions of Claude Code does it support?</summary><div class="ans"><p>warden reads the standard Claude Code storage locations. The config format changes over time, so expect the occasional gap; the scanner is defensive and degrades gracefully when something is missing or in a new shape.</p></div></details>
             <details><summary>Is it free and open source?</summary><div class="ans"><p>Yes. warden is MIT licensed and runs locally for free. The <a class="ilink" href="https://github.com/AmanKumarVerma11/warden">source is on GitHub</a>, and it is small on purpose so you can read it.</p></div></details>
-            <details><summary>What can it not do yet?</summary><div class="ans"><p>Today warden gives you full visibility plus a first set of reversible controls (forget memory, reclaim disk, edit permissions, disable hooks). Free-text editing of your <code>CLAUDE.md</code>, toggling connections, and switchable personas are on the roadmap. It is early and honest about it.</p></div></details>
+            <details><summary>What can it not do yet?</summary><div class="ans"><p>Today warden gives you full visibility plus reversible controls: forget memory, reclaim disk, edit permission rules, disable hooks, edit your <code>CLAUDE.md</code>, and save and switch personas (rules and permissions). Switching a persona's connections (MCPs), and syncing personas across a team, are next. It is early and honest about it.</p></div></details>
           </div>
         </section>
       </main>
